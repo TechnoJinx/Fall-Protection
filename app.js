@@ -377,6 +377,10 @@ async function viewDetail(id) {
       <div class="detail-grid-item"><div class="k">Manufacturer</div><div class="v">${escapeHtml(eq.manufacturer) || '—'}</div></div>
       <div class="detail-grid-item"><div class="k">Model</div><div class="v">${escapeHtml(eq.model) || '—'}</div></div>
       ${eq.type === 'harness' ? `<div class="detail-grid-item"><div class="k">Size</div><div class="v">${escapeHtml(eq.size) || '—'}</div></div>` : ''}
+      ${eq.type === 'lanyard' ? `<div class="detail-grid-item"><div class="k">Lanyard type</div><div class="v">${escapeHtml(eq.lanyardType) || '—'}</div></div>` : ''}
+      ${eq.type === 'srl' ? `<div class="detail-grid-item"><div class="k">Length</div><div class="v">${escapeHtml(eq.length) || '—'}</div></div>` : ''}
+      ${eq.type === 'srl' ? `<div class="detail-grid-item"><div class="k">Class</div><div class="v">${escapeHtml(eq.srlClass) || '—'}</div></div>` : ''}
+      ${eq.type === 'tieoff' ? `<div class="detail-grid-item"><div class="k">Length</div><div class="v">${escapeHtml(eq.length) || '—'}</div></div>` : ''}
       <div class="detail-grid-item"><div class="k">Serial number</div><div class="v">${escapeHtml(eq.serial) || '—'}</div></div>
       <div class="detail-grid-item"><div class="k">Lot number</div><div class="v">${escapeHtml(eq.lotNumber) || '—'}</div></div>
       <div class="detail-grid-item"><div class="k">Manufacture date</div><div class="v">${eq.manufactureDate ? fmtDate(eq.manufactureDate) : '—'}</div></div>
@@ -464,6 +468,24 @@ function viewAddEquipment(params) {
               ? `<option value="${escapeHtml(eq.size)}" selected>${escapeHtml(eq.size)}</option>` : ''}
           </select>
         </div>
+      </div>
+      <div class="field-row" id="lanyard-row" style="${eq.type === 'lanyard' ? '' : 'display:none;'}">
+        <div class="field"><label>Lanyard type</label>
+          <select name="lanyardType">
+            ${['', 'Nylon', 'Cable'].map(v => `<option value="${v}" ${eq.lanyardType === v ? 'selected' : ''}>${v || 'Select type…'}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field-row" id="srl-row" style="${eq.type === 'srl' ? '' : 'display:none;'}">
+        <div class="field"><label>Length</label><input name="length" value="${escapeHtml(eq.length || '')}" placeholder="e.g. 30 ft"></div>
+        <div class="field"><label>Class</label>
+          <select name="srlClass">
+            ${['', 'Class 1', 'Class 2'].map(v => `<option value="${v}" ${eq.srlClass === v ? 'selected' : ''}>${v || 'Select class…'}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div class="field-row" id="tieoff-row" style="${eq.type === 'tieoff' ? '' : 'display:none;'}">
+        <div class="field"><label>Length</label><input name="tieoffLength" value="${escapeHtml(eq.length || '')}" placeholder="e.g. 4 ft"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Serial number</label><input name="serial" value="${escapeHtml(eq.serial || '')}"></div>
@@ -681,6 +703,12 @@ function attachHandlers() {
   if (typeSelect) typeSelect.addEventListener('change', () => {
     const sizeRow = document.getElementById('size-row');
     if (sizeRow) sizeRow.style.display = typeSelect.value === 'harness' ? '' : 'none';
+    const lanyardRow = document.getElementById('lanyard-row');
+    if (lanyardRow) lanyardRow.style.display = typeSelect.value === 'lanyard' ? '' : 'none';
+    const srlRow = document.getElementById('srl-row');
+    if (srlRow) srlRow.style.display = typeSelect.value === 'srl' ? '' : 'none';
+    const tieoffRow = document.getElementById('tieoff-row');
+    if (tieoffRow) tieoffRow.style.display = typeSelect.value === 'tieoff' ? '' : 'none';
   });
 
   const eqForm = document.getElementById('eq-form');
@@ -699,6 +727,10 @@ function attachHandlers() {
       manufacturer: fd.get('manufacturer').trim(),
       model: fd.get('model').trim(),
       size: fd.get('size') ? fd.get('size').trim() : '',
+      lanyardType: fd.get('lanyardType') ? fd.get('lanyardType').trim() : '',
+      srlClass: fd.get('srlClass') ? fd.get('srlClass').trim() : '',
+      length: fd.get('type') === 'srl' ? (fd.get('length') || '').trim()
+        : fd.get('type') === 'tieoff' ? (fd.get('tieoffLength') || '').trim() : '',
       serial: fd.get('serial').trim(),
       lotNumber: fd.get('lotNumber').trim(),
       manufactureDate: fd.get('manufactureDate') || '',
