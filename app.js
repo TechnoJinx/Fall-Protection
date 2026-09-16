@@ -440,7 +440,14 @@ function viewAddEquipment(params) {
         <div class="field"><label>Model</label><input name="model" value="${escapeHtml(eq.model || '')}"></div>
       </div>
       <div class="field-row" id="size-row" style="${eq.type === 'harness' ? '' : 'display:none;'}">
-        <div class="field"><label>Size</label><input name="size" value="${escapeHtml(eq.size || '')}" placeholder="e.g. Universal, S/M, L/XL"></div>
+        <div class="field"><label>Size</label>
+          <select name="size">
+            ${['', 'Universal', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'S/M', 'L/XL']
+              .map(v => `<option value="${v}" ${eq.size === v ? 'selected' : ''}>${v || 'Select size…'}</option>`).join('')}
+            ${eq.size && !['Universal', 'XS', 'S', 'M', 'L', 'XL', 'XXL', 'S/M', 'L/XL'].includes(eq.size)
+              ? `<option value="${escapeHtml(eq.size)}" selected>${escapeHtml(eq.size)}</option>` : ''}
+          </select>
+        </div>
       </div>
       <div class="field-row">
         <div class="field"><label>Serial number</label><input name="serial" value="${escapeHtml(eq.serial || '')}"></div>
