@@ -360,6 +360,7 @@ async function viewDetail(id) {
     <div class="detail-grid">
       <div class="detail-grid-item"><div class="k">Manufacturer</div><div class="v">${escapeHtml(eq.manufacturer) || '—'}</div></div>
       <div class="detail-grid-item"><div class="k">Model</div><div class="v">${escapeHtml(eq.model) || '—'}</div></div>
+      ${eq.type === 'harness' ? `<div class="detail-grid-item"><div class="k">Size</div><div class="v">${escapeHtml(eq.size) || '—'}</div></div>` : ''}
       <div class="detail-grid-item"><div class="k">Serial number</div><div class="v">${escapeHtml(eq.serial) || '—'}</div></div>
       <div class="detail-grid-item"><div class="k">Lot number</div><div class="v">${escapeHtml(eq.lotNumber) || '—'}</div></div>
       <div class="detail-grid-item"><div class="k">Manufacture date</div><div class="v">${eq.manufactureDate ? fmtDate(eq.manufactureDate) : '—'}</div></div>
@@ -428,7 +429,7 @@ function viewAddEquipment(params) {
       </div>
       <div class="field">
         <label>Type</label>
-        <select name="type">${typeOpts}</select>
+        <select name="type" id="type-select">${typeOpts}</select>
       </div>
       <div class="field">
         <label>Label / nickname</label>
@@ -437,6 +438,9 @@ function viewAddEquipment(params) {
       <div class="field-row">
         <div class="field"><label>Manufacturer</label><input name="manufacturer" value="${escapeHtml(eq.manufacturer || '')}"></div>
         <div class="field"><label>Model</label><input name="model" value="${escapeHtml(eq.model || '')}"></div>
+      </div>
+      <div class="field-row" id="size-row" style="${eq.type === 'harness' ? '' : 'display:none;'}">
+        <div class="field"><label>Size</label><input name="size" value="${escapeHtml(eq.size || '')}" placeholder="e.g. Universal, S/M, L/XL"></div>
       </div>
       <div class="field-row">
         <div class="field"><label>Serial number</label><input name="serial" value="${escapeHtml(eq.serial || '')}"></div>
@@ -635,6 +639,12 @@ function attachHandlers() {
     render();
   });
 
+  const typeSelect = document.getElementById('type-select');
+  if (typeSelect) typeSelect.addEventListener('change', () => {
+    const sizeRow = document.getElementById('size-row');
+    if (sizeRow) sizeRow.style.display = typeSelect.value === 'harness' ? '' : 'none';
+  });
+
   const eqForm = document.getElementById('eq-form');
   if (eqForm) eqForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -650,6 +660,7 @@ function attachHandlers() {
       label: fd.get('label').trim(),
       manufacturer: fd.get('manufacturer').trim(),
       model: fd.get('model').trim(),
+      size: fd.get('size') ? fd.get('size').trim() : '',
       serial: fd.get('serial').trim(),
       lotNumber: fd.get('lotNumber').trim(),
       manufactureDate: fd.get('manufactureDate') || '',
