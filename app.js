@@ -493,9 +493,9 @@ async function viewInspect(id) {
           </div>
         </div>
       `).join('')}
-      <div class="field">
-        <label>Inspector name</label>
-        <input name="inspector" placeholder="Your name" required>
+      <div class="field-row">
+        <div class="field"><label>Inspected by</label><input name="inspector" placeholder="Your name" required></div>
+        <div class="field"><label>Date inspected</label><input type="date" name="inspDate" value="${todayStr()}" required></div>
       </div>
       <div class="field">
         <label>Notes (optional)</label>
@@ -720,7 +720,7 @@ function attachHandlers() {
     const ins = {
       insId: uid(),
       equipmentId: eqId,
-      date: todayStr(),
+      date: fd.get('inspDate') || todayStr(),
       inspector: fd.get('inspector').trim(),
       notes: fd.get('notes').trim(),
       items: results,
