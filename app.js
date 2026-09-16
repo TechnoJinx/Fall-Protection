@@ -6,12 +6,14 @@
 // published Fall Protection Inspection Checklist/Logs (Appendix, Release 2,
 // Oct 2017) so field checks match the manufacturer's own criteria.
 const EQUIPMENT_TYPES = {
-  harness:  { label: 'Full Body Harness',   icon: 'harness' },
-  lanyard:  { label: 'Lanyard',             icon: 'lanyard' },
-  tieoff:   { label: 'Tie-Off Adaptor',     icon: 'tieoff' },
-  hook:     { label: 'Hook / Carabiner',    icon: 'hook' },
-  anchor:   { label: 'Anchorage Plate',     icon: 'anchor' },
-  srl:      { label: 'Self Retracting Lifeline', icon: 'srl' },
+  harness:     { label: 'Full Body Harness',   icon: 'harness' },
+  lanyard:     { label: 'Lanyard',             icon: 'lanyard' },
+  tieoff:      { label: 'Tie-Off Adaptor',     icon: 'tieoff' },
+  hook:        { label: 'Hook / Carabiner',    icon: 'hook' },
+  anchor:      { label: 'Anchorage Plate',     icon: 'anchor' },
+  srl:         { label: 'Self Retracting Lifeline', icon: 'srl' },
+  escapebelt:  { label: 'Emergency Service Ladder / Escape Belt', icon: 'escapebelt' },
+  cablegrab:   { label: 'Cable Grab',          icon: 'cablegrab' },
 };
 
 const CHECKLISTS = {
@@ -58,6 +60,17 @@ const CHECKLISTS = {
     'Reserve lifeline: inspect reserve lifeline retention system for deployment',
     'Labels: inspect — make certain all labels are securely held in place and legible',
   ],
+  escapebelt: [
+    'Hardware (D-rings): inspect for damage, distortion, sharp edges, burrs, cracks and corrosion',
+    'Webbing: inspect for cuts, burns, tears, abrasion, frays, excessive soiling and discoloration',
+    'Stitching: inspect for pulled or cut stitches',
+    'Labels: inspect — make certain all labels are securely held in place and legible',
+  ],
+  cablegrab: [
+    'Excessive corrosion: inspect for corrosion which affects operation and/or strength',
+    'Physical damage: inspect for cracks, sharp edges, burrs, deformities and locking operation',
+    'Labels: inspect — make certain all labels are securely held in place and legible',
+  ],
 };
 
 const ICONS = {
@@ -67,6 +80,8 @@ const ICONS = {
   anchor: '<circle cx="12" cy="5" r="2"/><path d="M12 7v10M6 12H2a10 10 0 0020 0h-4M9 15l3 2 3-2"/>',
   tieoff: '<circle cx="8" cy="8" r="3"/><path d="M10.5 10.5L18 18"/><path d="M15 18h4v-4"/>',
   hook: '<path d="M8 3v9a5 5 0 0010 0"/><circle cx="8" cy="19" r="2.5"/>',
+  escapebelt: '<path d="M6 3v18M18 3v18M6 7h12M6 12h12M6 17h12"/>',
+  cablegrab: '<path d="M12 3v12"/><rect x="8" y="14" width="8" height="7" rx="1.5"/><path d="M9 21v-3M15 21v-3"/>',
   nfc: '<path d="M6 8a6 6 0 018 0M4 5a10 10 0 0112 0"/><circle cx="10" cy="14" r="2"/><path d="M13 12a4 4 0 010 4"/>',
   chevronLeft: '<path d="M15 18l-6-6 6-6"/>',
   plus: '<path d="M12 5v14M5 12h14"/>',
