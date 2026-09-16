@@ -74,6 +74,7 @@ const ICONS = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
+  refresh: '<path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/>',
 };
 function icon(name, size = 20) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
@@ -279,7 +280,7 @@ function viewDashboard() {
     else if (s === 'oos') counts.oos++;
   });
   return `
-  ${topbar({})}
+  ${topbar({ right: `<button class="icon-btn" data-action="force-update" title="Force refresh app">${icon('refresh', 18)}</button>` })}
   <main>
     <button class="scan-cta" data-action="scan-sheet">
       ${icon('nfc', 26)}
@@ -598,6 +599,9 @@ function attachHandlers() {
   const scanBtns = document.querySelectorAll('[data-action="scan-sheet"]');
   scanBtns.forEach(el => el.addEventListener('click', openScanSheet));
 
+  const forceUpdateBtn = document.querySelector('[data-action="force-update"]');
+  if (forceUpdateBtn) forceUpdateBtn.addEventListener('click', forceUpdate);
+
   const scanForId = document.querySelector('[data-action="scan-for-id"]');
   if (scanForId) scanForId.addEventListener('click', async () => {
     if (!nfcSupported()) { showToast('Web NFC not supported on this device.'); return; }
@@ -750,11 +754,39 @@ function updateInspectionBanner() {
   }
 }
 
+// ---------- Force refresh (clears SW + caches, matching the SCBA tracker's reset) ----------
+async function forceUpdate() {
+  showToast('Refreshing app…');
+  try {
+    if ('serviceWorker' in navigator) {
+      const regs = await navigator.serviceWorker.getRegistrations();
+      await Promise.all(regs.map(r => r.unregister()));
+    }
+    if ('caches' in window) {
+      const keys = await caches.keys();
+      await Promise.all(keys.map(k => caches.delete(k)));
+    }
+  } catch (e) { /* fall through to reload regardless */ }
+  location.reload();
+}
+
 // ---------- Boot ----------
 async function boot() {
   await openDB();
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('sw.js').catch(() => {});
+    navigator.serviceWorker.register('sw.js').then(reg => {
+      // Check for a newer sw.js on every launch so updates land without
+      // needing the manual force-refresh button.
+      reg.update().catch(() => {});
+    }).catch(() => {});
+    // When a new service worker takes control (after an update), reload
+    // once so the fresh app.js/index.html are actually used.
+    let refreshedOnce = false;
+    navigator.serviceWorker.addEventListener('controllerchange', () => {
+      if (refreshedOnce) return;
+      refreshedOnce = true;
+      location.reload();
+    });
   }
   const hashView = location.hash.replace('#', '');
   route = { view: hashView || 'dashboard', params: {} };
