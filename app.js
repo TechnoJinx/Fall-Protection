@@ -215,6 +215,7 @@ async function nfcWrite(idValue) {
 let route = { view: 'dashboard', params: {} };
 let equipmentCache = [];
 let listFilter = 'all';
+let listSearch = '';
 
 function navigate(view, params = {}) {
   route = { view, params };
@@ -321,14 +322,28 @@ function viewList() {
   ];
   let items = equipmentCache;
   if (listFilter !== 'all') items = items.filter(eq => computeStatus(eq) === listFilter);
+  const q = listSearch.trim().toLowerCase();
+  if (q) {
+    items = items.filter(eq =>
+      (eq.id || '').toLowerCase().includes(q) ||
+      (eq.serial || '').toLowerCase().includes(q) ||
+      (eq.label || '').toLowerCase().includes(q) ||
+      (eq.manufacturer || '').toLowerCase().includes(q) ||
+      (eq.model || '').toLowerCase().includes(q) ||
+      (eq.lotNumber || '').toLowerCase().includes(q)
+    );
+  }
   return `
   ${topbar({ right: `<button class="icon-btn" data-nav="addEquipment">${icon('plus')}</button>` })}
   <main>
     <div class="section-title">Equipment</div>
+    <div class="field" style="margin-bottom:14px;">
+      <input id="search-input" value="${escapeHtml(listSearch)}" placeholder="Search by ID, serial number, label..." autocomplete="off">
+    </div>
     <div class="filter-row">
       ${filters.map(f => `<button class="filter-chip ${listFilter === f.k ? 'active' : ''}" data-action="filter" data-filter="${f.k}">${f.label}</button>`).join('')}
     </div>
-    ${items.length ? items.map(eq => equipmentCard(eq)).join('') : `<div class="empty-state">${icon('list', 34)}<p>No equipment in this view yet.</p></div>`}
+    ${items.length ? items.map(eq => equipmentCard(eq)).join('') : `<div class="empty-state">${icon('list', 34)}<p>${q ? 'No equipment matches your search.' : 'No equipment in this view yet.'}</p></div>`}
   </main>`;
 }
 
@@ -525,8 +540,8 @@ async function openScanSheet() {
   if (!nfcSupported()) {
     const backdrop = openSheet(`
       <div class="sheet-title">Web NFC not available</div>
-      <div class="sheet-sub">Your browser doesn't support tag scanning. Enter the equipment ID printed on the tag instead.</div>
-      <div class="field"><input id="manual-id-input" placeholder="e.g. HAR-0042" autofocus></div>
+      <div class="sheet-sub">Your browser doesn't support tag scanning. Enter the equipment ID or serial number instead.</div>
+      <div class="field"><input id="manual-id-input" placeholder="Equipment ID or serial number" autofocus></div>
       <button class="btn-primary" id="manual-id-go">Look up</button>
     `);
     backdrop.querySelector('#manual-id-go').addEventListener('click', async () => {
@@ -546,8 +561,8 @@ async function openScanSheet() {
   backdrop.querySelector('#manual-fallback').addEventListener('click', () => {
     closeSheet();
     const b2 = openSheet(`
-      <div class="sheet-title">Enter equipment ID</div>
-      <div class="field"><input id="manual-id-input2" placeholder="e.g. HAR-0042" autofocus></div>
+      <div class="sheet-title">Enter equipment ID or serial number</div>
+      <div class="field"><input id="manual-id-input2" placeholder="Equipment ID or serial number" autofocus></div>
       <button class="btn-primary" id="manual-id-go2">Look up</button>
     `);
     b2.querySelector('#manual-id-go2').addEventListener('click', () => {
@@ -570,7 +585,10 @@ async function openScanSheet() {
 
 async function handleScannedId(idValue) {
   await refreshCache();
-  const match = equipmentCache.find(e => e.id === idValue);
+  const needle = idValue.trim().toLowerCase();
+  const match = equipmentCache.find(e =>
+    (e.id || '').toLowerCase() === needle || (e.serial || '').toLowerCase() === needle
+  );
   if (match) {
     navigate('detail', { id: match.id });
   } else {
@@ -594,6 +612,15 @@ function attachHandlers() {
 
   document.querySelectorAll('[data-action="filter"]').forEach(el => {
     el.addEventListener('click', () => { listFilter = el.dataset.filter; render(); });
+  });
+
+  const searchInput = document.getElementById('search-input');
+  if (searchInput) searchInput.addEventListener('input', async () => {
+    listSearch = searchInput.value;
+    const cursorPos = searchInput.selectionStart;
+    await render();
+    const newInput = document.getElementById('search-input');
+    if (newInput) { newInput.focus(); newInput.setSelectionRange(cursorPos, cursorPos); }
   });
 
   const scanBtns = document.querySelectorAll('[data-action="scan-sheet"]');
