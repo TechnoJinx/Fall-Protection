@@ -912,7 +912,6 @@ function attachHandlers() {
     };
     await dbPut('inspections', ins);
     eq.status = overallPass ? 'active' : 'out_of_service';
-    eq.nextDueDate = addMonths(ins.date, eq.intervalMonths);
     await dbPut('equipment', eq);
     showToast(overallPass ? 'Inspection accepted and logged.' : 'Inspection logged — item rejected and flagged out of service.');
     navigate('detail', { id: eqId, tab: 'history' });
