@@ -90,6 +90,7 @@ const ICONS = {
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
   refresh: '<path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/>',
+  barcode: '<path d="M3 5v14M7 5v14M11 5v14M13 5v14M17 5v14M21 5v14"/>',
 };
 function icon(name, size = 20) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
@@ -224,6 +225,43 @@ async function nfcWrite(idValue) {
   if (!nfcSupported()) throw new Error('unsupported');
   const writer = new NDEFReader();
   await writer.write({ records: [{ recordType: 'text', data: idValue }] });
+}
+
+// ---------- Barcode / QR scanning (camera) ----------
+// Covers printed barcodes (like the ones used for extinguishers/lights on the
+// SCBA tracker) using the phone's camera — no extra hardware needed. A
+// physical USB/Bluetooth barcode scanner also works with this app already:
+// those act as a keyboard, so scanning into any text field + its Enter key
+// types the code and submits it (wired below on the manual-entry inputs).
+function barcodeSupported() { return 'BarcodeDetector' in window; }
+let _barcodeStream = null;
+let _barcodeRAF = null;
+async function startBarcodeScan(videoEl, onRead) {
+  if (!barcodeSupported()) throw new Error('unsupported');
+  const detector = new BarcodeDetector({
+    formats: ['qr_code', 'code_128', 'code_39', 'code_93', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'pdf417', 'data_matrix'],
+  });
+  _barcodeStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+  videoEl.srcObject = _barcodeStream;
+  await videoEl.play();
+  let stopped = false;
+  const tick = async () => {
+    if (stopped) return;
+    try {
+      const codes = await detector.detect(videoEl);
+      if (codes.length) {
+        stopped = true;
+        onRead(codes[0].rawValue.trim());
+        return;
+      }
+    } catch (e) { /* keep trying */ }
+    _barcodeRAF = requestAnimationFrame(tick);
+  };
+  tick();
+}
+function stopBarcodeScan() {
+  if (_barcodeRAF) { cancelAnimationFrame(_barcodeRAF); _barcodeRAF = null; }
+  if (_barcodeStream) { _barcodeStream.getTracks().forEach(t => t.stop()); _barcodeStream = null; }
 }
 
 // ---------- Router / state ----------
@@ -459,7 +497,8 @@ function viewAddEquipment(params) {
         <label>Equipment ID</label>
         <div class="id-input-row">
           <input name="id" value="${escapeHtml(eq.id)}" placeholder="e.g. HAR-0042" ${editing ? 'readonly' : ''} required>
-          ${!editing ? `<button type="button" class="nfc-mini-btn" data-action="scan-for-id">${icon('nfc', 16)}</button>` : ''}
+          ${!editing && nfcSupported() ? `<button type="button" class="nfc-mini-btn" data-action="scan-for-id">${icon('nfc', 16)}</button>` : ''}
+          ${!editing && barcodeSupported() ? `<button type="button" class="nfc-mini-btn" data-action="barcode-for-id">${icon('barcode', 16)}</button>` : ''}
         </div>
       </div>
       <div class="field">
@@ -513,6 +552,10 @@ function viewAddEquipment(params) {
       <div class="field-row">
         <div class="field"><label>In service since</label><input type="date" name="dateInService" value="${eq.dateInService || todayStr()}"></div>
         <div class="field"><label>Inspection interval (months)</label><input type="number" name="intervalMonths" min="1" value="${eq.intervalMonths || 12}"></div>
+      </div>
+      <div class="field">
+        <label>Next inspection due</label>
+        <input type="date" name="nextDueDate" value="${eq.nextDueDate || ''}">
       </div>
       <div class="field-row">
         <div class="field"><label>Location / unit</label><input name="location" value="${escapeHtml(eq.location || '')}" placeholder="e.g. Coker"></div>
@@ -570,25 +613,57 @@ function openSheet(html) {
 }
 function closeSheet() {
   nfcStop();
+  stopBarcodeScan();
   document.querySelectorAll('.sheet-backdrop').forEach(el => el.remove());
 }
 
-async function openScanSheet() {
-  if (!nfcSupported()) {
-    const backdrop = openSheet(`
-      <div class="sheet-title">Web NFC not available</div>
-      <div class="sheet-sub">Your browser doesn't support tag scanning. Enter the equipment ID or serial number instead.</div>
-      <div class="field"><input id="manual-id-input" placeholder="Equipment ID or serial number" autofocus></div>
-      <button class="btn-primary" id="manual-id-go">Look up</button>
-    `);
-    backdrop.querySelector('#manual-id-go').addEventListener('click', async () => {
-      const val = backdrop.querySelector('#manual-id-input').value.trim();
-      if (!val) return;
-      closeSheet();
-      handleScannedId(val);
-    });
+function openManualEntrySheet(title) {
+  const backdrop = openSheet(`
+    <div class="sheet-title">${title || 'Enter equipment ID or serial number'}</div>
+    <div class="field"><input id="manual-id-input" placeholder="Equipment ID or serial number" autofocus></div>
+    <button class="btn-primary" id="manual-id-go">Look up</button>
+  `);
+  const input = backdrop.querySelector('#manual-id-input');
+  const go = () => {
+    const val = input.value.trim();
+    if (!val) return;
+    closeSheet();
+    handleScannedId(val);
+  };
+  backdrop.querySelector('#manual-id-go').addEventListener('click', go);
+  // A physical USB/Bluetooth barcode scanner acts like a keyboard: it types
+  // the code into whatever's focused, then sends Enter — so this submits
+  // automatically the moment someone scans into this field.
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); go(); } });
+}
+
+function openBarcodeSheet() {
+  if (!barcodeSupported()) {
+    showToast('Camera barcode scanning isn\'t supported on this browser.');
+    openManualEntrySheet();
     return;
   }
+  const backdrop = openSheet(`
+    <div class="sheet-title">Scanning for barcode…</div>
+    <div class="sheet-sub">Point the camera at the barcode or QR code.</div>
+    <video id="barcode-video" playsinline muted style="width:100%;border-radius:12px;background:#000;margin-bottom:16px;"></video>
+    <button class="btn-secondary" id="manual-fallback-bc">Enter ID manually instead</button>
+  `);
+  backdrop.querySelector('#manual-fallback-bc').addEventListener('click', () => {
+    closeSheet();
+    openManualEntrySheet();
+  });
+  const videoEl = backdrop.querySelector('#barcode-video');
+  startBarcodeScan(videoEl, (text) => {
+    closeSheet();
+    handleScannedId(text);
+  }).catch(() => {
+    closeSheet();
+    showToast('Could not access the camera.');
+  });
+}
+
+function openNfcSheet() {
   const backdrop = openSheet(`
     <div class="sheet-title">Scanning for tag…</div>
     <div class="sheet-sub">Hold your phone near the NFC tag.</div>
@@ -597,27 +672,45 @@ async function openScanSheet() {
   `);
   backdrop.querySelector('#manual-fallback').addEventListener('click', () => {
     closeSheet();
-    const b2 = openSheet(`
-      <div class="sheet-title">Enter equipment ID or serial number</div>
-      <div class="field"><input id="manual-id-input2" placeholder="Equipment ID or serial number" autofocus></div>
-      <button class="btn-primary" id="manual-id-go2">Look up</button>
-    `);
-    b2.querySelector('#manual-id-go2').addEventListener('click', () => {
-      const val = b2.querySelector('#manual-id-input2').value.trim();
-      if (!val) return;
-      closeSheet();
-      handleScannedId(val);
-    });
+    openManualEntrySheet();
   });
-  try {
-    await nfcScan((text) => {
-      closeSheet();
-      handleScannedId(text);
-    });
-  } catch (err) {
+  nfcScan((text) => {
+    closeSheet();
+    handleScannedId(text);
+  }).catch(() => {
     closeSheet();
     showToast('Could not start NFC scan.');
-  }
+  });
+}
+
+async function openScanSheet() {
+  const options = [];
+  if (nfcSupported()) options.push({ id: 'nfc', label: 'Scan NFC tag', sub: 'For tagged SCBA-style equipment', icon: 'nfc' });
+  if (barcodeSupported()) options.push({ id: 'barcode', label: 'Scan barcode / QR', sub: 'Use the camera on a printed code', icon: 'barcode' });
+  options.push({ id: 'manual', label: 'Enter ID manually', sub: 'Type the code, or scan into it with a handheld scanner', icon: 'list' });
+
+  // If there's exactly one real scanning method available (no NFC, no
+  // camera), skip the chooser and go straight to manual entry.
+  if (options.length === 1) { openManualEntrySheet(); return; }
+
+  const backdrop = openSheet(`
+    <div class="sheet-title">Look up equipment</div>
+    <div class="sheet-sub">Choose how you'd like to find it.</div>
+    ${options.map(o => `
+      <button class="item-card" style="width:100%;text-align:left;margin-bottom:10px;" data-scan-choice="${o.id}">
+        <div class="item-type-icon">${icon(o.icon, 20)}</div>
+        <div class="item-main"><div class="item-title">${o.label}</div><div class="item-sub">${o.sub}</div></div>
+      </button>`).join('')}
+  `);
+  backdrop.querySelectorAll('[data-scan-choice]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const choice = btn.dataset.scanChoice;
+      closeSheet();
+      if (choice === 'nfc') openNfcSheet();
+      else if (choice === 'barcode') openBarcodeSheet();
+      else openManualEntrySheet();
+    });
+  });
 }
 
 async function handleScannedId(idValue) {
@@ -681,6 +774,22 @@ function attachHandlers() {
         if (input) input.value = text;
       });
     } catch (e) { closeSheet(); showToast('Could not start NFC scan.'); }
+  });
+
+  const barcodeForId = document.querySelector('[data-action="barcode-for-id"]');
+  if (barcodeForId) barcodeForId.addEventListener('click', () => {
+    if (!barcodeSupported()) { showToast('Camera barcode scanning not supported on this device.'); return; }
+    const backdrop = openSheet(`
+      <div class="sheet-title">Scanning barcode…</div>
+      <div class="sheet-sub">Point the camera at the barcode or QR code.</div>
+      <video id="barcode-video-id" playsinline muted style="width:100%;border-radius:12px;background:#000;margin-bottom:16px;"></video>
+    `);
+    const videoEl = backdrop.querySelector('#barcode-video-id');
+    startBarcodeScan(videoEl, (text) => {
+      closeSheet();
+      const input = document.querySelector('#eq-form input[name="id"]');
+      if (input) input.value = text;
+    }).catch(() => { closeSheet(); showToast('Could not access the camera.'); });
   });
 
   const detailTabs = document.querySelectorAll('[data-action="detail-tab"]');
@@ -756,7 +865,8 @@ function attachHandlers() {
       assignedTo: fd.get('assignedTo').trim(),
       comments: fd.get('comments').trim(),
       status: existing ? existing.status : 'active',
-      nextDueDate: existing && existing.nextDueDate ? existing.nextDueDate : addMonths(dateInService, intervalMonths),
+      nextDueDate: fd.get('nextDueDate') ? fd.get('nextDueDate')
+        : (existing && existing.nextDueDate ? existing.nextDueDate : addMonths(dateInService, intervalMonths)),
       createdAt: existing ? existing.createdAt : Date.now(),
     };
     await dbPut('equipment', eq);
