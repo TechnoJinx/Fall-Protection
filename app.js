@@ -91,6 +91,7 @@ const ICONS = {
   check: '<path d="M20 6L9 17l-5-5"/>',
   refresh: '<path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/>',
   barcode: '<path d="M3 5v14M7 5v14M11 5v14M13 5v14M17 5v14M21 5v14"/>',
+  upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>',
 };
 function icon(name, size = 20) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
@@ -387,7 +388,7 @@ function viewList() {
     );
   }
   return `
-  ${topbar({ right: `<button class="icon-btn" data-nav="addEquipment">${icon('plus')}</button>` })}
+  ${topbar({ right: `<button class="icon-btn" data-action="import-file" title="Import equipment">${icon('upload')}</button><button class="icon-btn" data-nav="addEquipment">${icon('plus')}</button>` })}
   <main>
     <div class="section-title">Equipment</div>
     <div class="field" style="margin-bottom:14px;">
@@ -759,6 +760,9 @@ function attachHandlers() {
   const forceUpdateBtn = document.querySelector('[data-action="force-update"]');
   if (forceUpdateBtn) forceUpdateBtn.addEventListener('click', forceUpdate);
 
+  const importBtn = document.querySelector('[data-action="import-file"]');
+  if (importBtn) importBtn.addEventListener('click', () => ensureImportInput().click());
+
   const scanForId = document.querySelector('[data-action="scan-for-id"]');
   if (scanForId) scanForId.addEventListener('click', async () => {
     if (!nfcSupported()) { showToast('Web NFC not supported on this device.'); return; }
@@ -937,7 +941,90 @@ function updateInspectionBanner() {
   }
 }
 
-// ---------- Force refresh (clears SW + caches, matching the SCBA tracker's reset) ----------
+// ---------- Import (bulk add equipment + inspections from a JSON file) ----------
+// Expected shape:
+// { "equipment": [{ id, type, label, manufacturer, model, size, lanyardType,
+//     length, srlClass, serial, lotNumber, manufactureDate, purchaseDate,
+//     dateInService, intervalMonths, location, assignedTo, comments,
+//     nextDueDate, status }, ...],
+//   "inspections": [{ equipmentId, date, inspector, notes, items: [...],
+//     result }, ...] }
+function ensureImportInput() {
+  let input = document.getElementById('import-file-input');
+  if (!input) {
+    input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'application/json,.json';
+    input.id = 'import-file-input';
+    input.style.display = 'none';
+    document.body.appendChild(input);
+    input.addEventListener('change', async () => {
+      const file = input.files[0];
+      input.value = '';
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        await runImport(data);
+      } catch (e) {
+        showToast('Could not read that file — check it\'s valid JSON.');
+      }
+    });
+  }
+  return input;
+}
+
+async function runImport(data) {
+  const eqList = Array.isArray(data.equipment) ? data.equipment : [];
+  const insList = Array.isArray(data.inspections) ? data.inspections : [];
+  let addedEq = 0, skippedEq = 0, addedIns = 0;
+  for (const eq of eqList) {
+    if (!eq.id || !eq.type) continue;
+    const existing = await dbGet('equipment', eq.id);
+    if (existing) { skippedEq++; continue; }
+    await dbPut('equipment', {
+      id: eq.id,
+      type: eq.type,
+      label: eq.label || '',
+      manufacturer: eq.manufacturer || '',
+      model: eq.model || '',
+      size: eq.size || '',
+      lanyardType: eq.lanyardType || '',
+      length: eq.length || '',
+      srlClass: eq.srlClass || '',
+      serial: eq.serial || '',
+      lotNumber: eq.lotNumber || '',
+      manufactureDate: eq.manufactureDate || '',
+      purchaseDate: eq.purchaseDate || '',
+      dateInService: eq.dateInService || todayStr(),
+      intervalMonths: eq.intervalMonths || 12,
+      location: eq.location || '',
+      assignedTo: eq.assignedTo || '',
+      comments: eq.comments || '',
+      nextDueDate: eq.nextDueDate || addMonths(eq.dateInService || todayStr(), eq.intervalMonths || 12),
+      status: eq.status || 'active',
+      createdAt: Date.now(),
+    });
+    addedEq++;
+  }
+  for (const ins of insList) {
+    if (!ins.equipmentId || !ins.date) continue;
+    await dbPut('inspections', {
+      insId: uid(),
+      equipmentId: ins.equipmentId,
+      date: ins.date,
+      inspector: ins.inspector || '',
+      notes: ins.notes || '',
+      items: Array.isArray(ins.items) ? ins.items : [],
+      result: ins.result === 'fail' ? 'fail' : 'pass',
+    });
+    addedIns++;
+  }
+  showToast(`Imported ${addedEq} equipment, ${addedIns} inspections${skippedEq ? ` (${skippedEq} skipped — ID already exists)` : ''}.`);
+  navigate('list');
+}
+
+
 async function forceUpdate() {
   showToast('Refreshing app…');
   try {

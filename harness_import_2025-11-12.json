@@ -1,0 +1,454 @@
+{
+  "equipment": [
+    {
+      "id": "HAR-5006197",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 A5F9EBC",
+      "lotNumber": "5075517",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5001531",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1110277",
+      "size": "Large",
+      "serial": "982 000 132 865 447",
+      "lotNumber": "14711089",
+      "manufactureDate": "2010-02-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-6600203",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1110277",
+      "size": "Large",
+      "serial": "E00 403500 C36527BB",
+      "lotNumber": "4664383",
+      "manufactureDate": "2018-04-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5001034",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1110277",
+      "size": "Large",
+      "serial": "E00 401005 0AB8179",
+      "lotNumber": "15427939",
+      "manufactureDate": "2011-05-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5006187",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 A5FC917",
+      "lotNumber": "5075517",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5006139",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 3832D69",
+      "lotNumber": "5075518",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5006143",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 7ADFDFA",
+      "lotNumber": "5075518",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5006142",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 382CB9B",
+      "lotNumber": "5075518",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5006141",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 753648B",
+      "lotNumber": "5075518",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-7000104",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1140129",
+      "size": "Large",
+      "serial": "E00 403501 992FD38",
+      "lotNumber": "2288936",
+      "manufactureDate": "2022-12-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-6000230",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1110277",
+      "size": "Large",
+      "serial": "E00 403501 41B89AD",
+      "lotNumber": "6887214",
+      "manufactureDate": "2020-11-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5001578",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1110273",
+      "size": "Large",
+      "serial": "982 000 128 564 164",
+      "lotNumber": "14244358",
+      "manufactureDate": "2009-04-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-5006186",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1402007",
+      "size": "Large",
+      "serial": "E00 403501 F9A6886",
+      "lotNumber": "5075516",
+      "manufactureDate": "2024-03-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    },
+    {
+      "id": "HAR-6000177",
+      "type": "harness",
+      "label": "",
+      "manufacturer": "3M DBI-SALA",
+      "model": "1110277",
+      "size": "Large",
+      "serial": "E00 403500 C2AE9A7",
+      "lotNumber": "4664380",
+      "manufactureDate": "2018-04-01",
+      "purchaseDate": "",
+      "dateInService": "2025-11-12",
+      "intervalMonths": 12,
+      "location": "",
+      "assignedTo": "",
+      "comments": "",
+      "nextDueDate": "2026-11-12",
+      "status": "active"
+    }
+  ],
+  "inspections": [
+    {
+      "equipmentId": "HAR-5006197",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5001531",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-6600203",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5001034",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5006187",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5006139",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5006143",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5006142",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5006141",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-7000104",
+      "date": "2025-11-12",
+      "inspector": "M. Moore",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-6000230",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5001578",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-5006186",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    },
+    {
+      "equipmentId": "HAR-6000177",
+      "date": "2025-11-12",
+      "inspector": "M. Moore & R. Anderson",
+      "notes": "",
+      "items": [
+        "pass",
+        "pass",
+        "pass",
+        "pass"
+      ],
+      "result": "pass"
+    }
+  ]
+}
