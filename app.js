@@ -449,6 +449,7 @@ async function viewDetail(id) {
     <button class="btn-secondary" data-nav="addEquipment" data-edit="${eq.id}">Edit details</button>
     ${eq.status === 'out_of_service' ? `<button class="btn-secondary" data-action="return-service" data-id="${eq.id}">Return to service</button>` : ''}
     ${eq.status !== 'retired' ? `<button class="btn-danger" data-action="retire" data-id="${eq.id}">Retire this item</button>` : `<button class="btn-secondary" data-action="unretire" data-id="${eq.id}">Un-retire</button>`}
+    <button class="btn-danger" data-action="delete-equipment" data-id="${eq.id}" style="margin-top:6px;">Delete equipment</button>
   `;
   const historyTab = inspections.length
     ? inspections.map(ins => `<div class="insp-row">
@@ -497,10 +498,11 @@ function viewAddEquipment(params) {
       <div class="field">
         <label>Equipment ID</label>
         <div class="id-input-row">
-          <input name="id" value="${escapeHtml(eq.id)}" placeholder="e.g. HAR-0042" ${editing ? 'readonly' : ''} required>
+          <input name="id" value="${escapeHtml(eq.id)}" placeholder="e.g. HAR-0042" required>
           ${!editing && nfcSupported() ? `<button type="button" class="nfc-mini-btn" data-action="scan-for-id">${icon('nfc', 16)}</button>` : ''}
           ${!editing && barcodeSupported() ? `<button type="button" class="nfc-mini-btn" data-action="barcode-for-id">${icon('barcode', 16)}</button>` : ''}
         </div>
+        ${editing ? `<div class="eyebrow" style="margin-top:6px;">Changing this moves its inspection history to the new ID.</div>` : ''}
       </div>
       <div class="field">
         <label>Type</label>
@@ -827,6 +829,27 @@ function attachHandlers() {
     render();
   });
 
+  const deleteBtn = document.querySelector('[data-action="delete-equipment"]');
+  if (deleteBtn) deleteBtn.addEventListener('click', async () => {
+    const id = deleteBtn.dataset.id;
+    const eq = await dbGet('equipment', id);
+    const inspections = await dbInspectionsFor(id);
+    const backdrop = openSheet(`
+      <div class="sheet-title">Delete ${escapeHtml(eq.label || eq.id)}?</div>
+      <div class="sheet-sub">This permanently removes the equipment record${inspections.length ? ` and its ${inspections.length} logged inspection${inspections.length === 1 ? '' : 's'}` : ''}. This can't be undone.</div>
+      <button class="btn-danger" id="confirm-delete">Delete permanently</button>
+      <button class="btn-secondary" id="cancel-delete">Cancel</button>
+    `);
+    backdrop.querySelector('#cancel-delete').addEventListener('click', closeSheet);
+    backdrop.querySelector('#confirm-delete').addEventListener('click', async () => {
+      for (const ins of inspections) { await dbDelete('inspections', ins.insId); }
+      await dbDelete('equipment', id);
+      closeSheet();
+      showToast('Equipment deleted.');
+      navigate('list');
+    });
+  });
+
   const typeSelect = document.getElementById('type-select');
   if (typeSelect) typeSelect.addEventListener('change', () => {
     const sizeRow = document.getElementById('size-row');
@@ -845,7 +868,12 @@ function attachHandlers() {
     const fd = new FormData(eqForm);
     const id = fd.get('id').trim();
     if (!id) return;
-    const existing = await dbGet('equipment', id);
+    const editingId = route.params.edit || null;
+    const existing = editingId ? await dbGet('equipment', editingId) : await dbGet('equipment', id);
+    if (editingId && id !== editingId) {
+      const conflict = await dbGet('equipment', id);
+      if (conflict) { showToast(`ID "${id}" is already in use by another item.`); return; }
+    }
     const intervalMonths = parseInt(fd.get('intervalMonths'), 10) || 12;
     const dateInService = fd.get('dateInService') || todayStr();
     const eq = {
@@ -874,7 +902,19 @@ function attachHandlers() {
       createdAt: existing ? existing.createdAt : Date.now(),
     };
     await dbPut('equipment', eq);
-    showToast(existing ? 'Equipment updated.' : 'Equipment added.');
+    if (editingId && id !== editingId) {
+      // ID was changed: move this equipment's inspection history over to the
+      // new ID, then remove the old equipment record.
+      const oldInspections = await dbInspectionsFor(editingId);
+      for (const ins of oldInspections) {
+        ins.equipmentId = id;
+        await dbPut('inspections', ins);
+      }
+      await dbDelete('equipment', editingId);
+      showToast(`Equipment ID changed to "${id}".`);
+    } else {
+      showToast(existing ? 'Equipment updated.' : 'Equipment added.');
+    }
     navigate('detail', { id });
   });
 
