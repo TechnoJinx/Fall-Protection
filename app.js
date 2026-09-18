@@ -297,6 +297,7 @@ async function render() {
     case 'detail': body = await viewDetail(route.params.id); break;
     case 'addEquipment': body = viewAddEquipment(route.params); break;
     case 'inspect': body = await viewInspect(route.params.id); break;
+    case 'editInspection': body = await viewEditInspection(route.params.id, route.params.insId); break;
     default: body = viewDashboard();
   }
   app.innerHTML = body + bottomNav();
@@ -459,6 +460,10 @@ async function viewDetail(id) {
         </div>
         <div class="insp-inspector">Inspected by ${escapeHtml(ins.inspector) || '—'}</div>
         ${ins.notes ? `<div class="insp-notes">${escapeHtml(ins.notes)}</div>` : ''}
+        <div class="badge-row">
+          <button class="mini-badge" style="cursor:pointer;" data-nav="editInspection" data-id="${eq.id}" data-insid="${ins.insId}">Edit</button>
+          <button class="mini-badge" style="cursor:pointer;color:var(--fail);" data-action="delete-inspection" data-id="${eq.id}" data-insid="${ins.insId}">Delete</button>
+        </div>
       </div>`).join('')
     : `<div class="empty-state">${icon('clock', 30)}<p>No inspections logged yet.</p></div>`;
 
@@ -605,6 +610,42 @@ async function viewInspect(id) {
   </main>`;
 }
 
+async function viewEditInspection(equipmentId, insId) {
+  const eq = await dbGet('equipment', equipmentId);
+  const ins = await dbGet('inspections', insId);
+  if (!eq || !ins) return `${topbar({ back: true })}<main><div class="empty-state"><p>Inspection not found.</p></div></main>`;
+  const items = CHECKLISTS[eq.type] || [];
+  return `
+  ${topbar({ back: true })}
+  <main>
+    <div class="eyebrow">${(EQUIPMENT_TYPES[eq.type] || {}).label} · Editing inspection</div>
+    <div class="section-title">${escapeHtml(eq.label || eq.id)}</div>
+    <form id="insp-edit-form" data-id="${eq.id}" data-insid="${ins.insId}">
+      ${items.map((label, i) => `
+        <div class="checklist-item">
+          <div class="checklist-item-label">${escapeHtml(label)}</div>
+          <div class="checklist-toggle" data-idx="${i}">
+            <button type="button" class="toggle-btn pass ${ins.items && ins.items[i] === 'pass' ? 'selected' : ''}" data-val="pass">Accepted</button>
+            <button type="button" class="toggle-btn fail ${ins.items && ins.items[i] === 'fail' ? 'selected' : ''}" data-val="fail">Rejected</button>
+            <button type="button" class="toggle-btn na ${ins.items && ins.items[i] === 'na' ? 'selected' : ''}" data-val="na">N/A</button>
+          </div>
+        </div>
+      `).join('')}
+      <div class="field-row">
+        <div class="field"><label>Inspected by</label><input name="inspector" value="${escapeHtml(ins.inspector || '')}" placeholder="Your name" required></div>
+        <div class="field"><label>Date inspected</label><input type="date" name="inspDate" value="${ins.date || todayStr()}" required></div>
+      </div>
+      <div class="field">
+        <label>Notes (optional)</label>
+        <textarea name="notes" placeholder="Anything worth flagging...">${escapeHtml(ins.notes || '')}</textarea>
+      </div>
+      <div id="insp-result-banner"></div>
+      <button type="submit" class="btn-primary">Save changes</button>
+      <button type="button" class="btn-danger" id="delete-inspection-inline">Delete this inspection</button>
+    </form>
+  </main>`;
+}
+
 // ---------- Sheets ----------
 function openSheet(html) {
   const backdrop = document.createElement('div');
@@ -739,6 +780,7 @@ function attachHandlers() {
       if (el.dataset.id) params.id = el.dataset.id;
       if (el.dataset.filter) params.filter = el.dataset.filter;
       if (el.dataset.edit) params.edit = el.dataset.edit;
+      if (el.dataset.insid) params.insId = el.dataset.insid;
       navigate(target, params);
     });
   });
@@ -959,6 +1001,66 @@ function attachHandlers() {
     await dbPut('equipment', eq);
     showToast(overallPass ? 'Inspection accepted and logged.' : 'Inspection logged — item rejected and flagged out of service.');
     navigate('dashboard');
+  });
+
+  const inspEditForm = document.getElementById('insp-edit-form');
+  if (inspEditForm) inspEditForm.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const groups = inspEditForm.querySelectorAll('.checklist-toggle');
+    const results = [];
+    let allAnswered = true;
+    groups.forEach(g => {
+      const sel = g.querySelector('.toggle-btn.selected');
+      if (!sel) allAnswered = false;
+      results.push(sel ? sel.dataset.val : null);
+    });
+    if (!allAnswered) { showToast('Answer every checklist item.'); return; }
+    const fd = new FormData(inspEditForm);
+    const eqId = inspEditForm.dataset.id;
+    const insId = inspEditForm.dataset.insid;
+    const eq = await dbGet('equipment', eqId);
+    const overallPass = !results.includes('fail');
+    const ins = {
+      insId,
+      equipmentId: eqId,
+      date: fd.get('inspDate') || todayStr(),
+      inspector: fd.get('inspector').trim(),
+      notes: fd.get('notes').trim(),
+      items: results,
+      result: overallPass ? 'pass' : 'fail',
+    };
+    await dbPut('inspections', ins);
+    eq.status = overallPass ? 'active' : 'out_of_service';
+    await dbPut('equipment', eq);
+    showToast('Inspection updated.');
+    navigate('detail', { id: eqId, tab: 'history' });
+  });
+
+  const deleteInspectionInline = document.getElementById('delete-inspection-inline');
+  if (deleteInspectionInline) deleteInspectionInline.addEventListener('click', () => {
+    const eqId = inspEditForm.dataset.id;
+    const insId = inspEditForm.dataset.insid;
+    confirmDeleteInspection(eqId, insId);
+  });
+
+  document.querySelectorAll('[data-action="delete-inspection"]').forEach(btn => {
+    btn.addEventListener('click', () => confirmDeleteInspection(btn.dataset.id, btn.dataset.insid));
+  });
+}
+
+function confirmDeleteInspection(eqId, insId) {
+  const backdrop = openSheet(`
+    <div class="sheet-title">Delete this inspection?</div>
+    <div class="sheet-sub">This removes it from the history log permanently. This can't be undone.</div>
+    <button class="btn-danger" id="confirm-delete-insp">Delete permanently</button>
+    <button class="btn-secondary" id="cancel-delete-insp">Cancel</button>
+  `);
+  backdrop.querySelector('#cancel-delete-insp').addEventListener('click', closeSheet);
+  backdrop.querySelector('#confirm-delete-insp').addEventListener('click', async () => {
+    await dbDelete('inspections', insId);
+    closeSheet();
+    showToast('Inspection deleted.');
+    navigate('detail', { id: eqId, tab: 'history' });
   });
 }
 
