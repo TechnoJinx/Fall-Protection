@@ -92,6 +92,7 @@ const ICONS = {
   refresh: '<path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/>',
   barcode: '<path d="M3 5v14M7 5v14M11 5v14M13 5v14M17 5v14M21 5v14"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>',
+  download: '<path d="M12 4v12M7 11l5 5 5-5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>',
 };
 function icon(name, size = 20) {
   return `<svg width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ''}</svg>`;
@@ -389,7 +390,7 @@ function viewList() {
     );
   }
   return `
-  ${topbar({ right: `<button class="icon-btn" data-action="import-file" title="Import equipment">${icon('upload')}</button><button class="icon-btn" data-nav="addEquipment">${icon('plus')}</button>` })}
+  ${topbar({ right: `<div style="display:flex;gap:8px;"><button class="icon-btn" data-action="export-xlsx" title="Export to Excel">${icon('download')}</button><button class="icon-btn" data-action="import-file" title="Import equipment">${icon('upload')}</button><button class="icon-btn" data-nav="addEquipment">${icon('plus')}</button></div>` })}
   <main>
     <div class="section-title">Equipment</div>
     <div class="field" style="margin-bottom:14px;">
@@ -804,6 +805,9 @@ function attachHandlers() {
   const forceUpdateBtn = document.querySelector('[data-action="force-update"]');
   if (forceUpdateBtn) forceUpdateBtn.addEventListener('click', forceUpdate);
 
+  const exportBtn = document.querySelector('[data-action="export-xlsx"]');
+  if (exportBtn) exportBtn.addEventListener('click', exportXlsx);
+
   const importBtn = document.querySelector('[data-action="import-file"]');
   if (importBtn) importBtn.addEventListener('click', () => ensureImportInput().click());
 
@@ -1166,6 +1170,112 @@ async function runImport(data) {
   navigate('list');
 }
 
+
+// ---------- Export to Excel (inventory + full inspection history, by year) ----------
+const XLSX_URL = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+function loadXlsxLib() {
+  return new Promise((resolve, reject) => {
+    if (window.XLSX) return resolve(window.XLSX);
+    const s = document.createElement('script');
+    s.src = XLSX_URL;
+    s.onload = () => resolve(window.XLSX);
+    s.onerror = () => reject(new Error('xlsx load failed'));
+    document.head.appendChild(s);
+  });
+}
+// Excel stores dates as day-serial numbers; computing it directly avoids
+// timezone drift that JS Date objects can introduce.
+function xlDate(s) {
+  if (!s) return '';
+  const [y, m, d] = s.split('-').map(Number);
+  return Math.round(Date.UTC(y, m - 1, d) / 86400000) + 25569;
+}
+function applyColFormat(XLSX, ws, colIdxs, fmt) {
+  const range = XLSX.utils.decode_range(ws['!ref']);
+  for (let r = 1; r <= range.e.r; r++) {
+    for (const c of colIdxs) {
+      const cell = ws[XLSX.utils.encode_cell({ r, c })];
+      if (cell && cell.t === 'n') cell.z = fmt;
+    }
+  }
+}
+function sheetFrom(XLSX, rows, widths, dateCols = [], monthCols = []) {
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = widths.map(w => ({ wch: w }));
+  ws['!autofilter'] = { ref: ws['!ref'] };
+  applyColFormat(XLSX, ws, dateCols, 'mm/dd/yyyy');
+  applyColFormat(XLSX, ws, monthCols, 'mm/yyyy');
+  return ws;
+}
+async function exportXlsx() {
+  showToast('Building Excel file…');
+  let XLSX;
+  try { XLSX = await loadXlsxLib(); }
+  catch (e) { showToast('Could not load the Excel library — connect to the internet and try again.'); return; }
+
+  const equipment = await dbGetAll('equipment');
+  const inspections = await dbGetAll('inspections');
+  equipment.sort((a, b) => String(a.id).localeCompare(String(b.id), undefined, { numeric: true }));
+  inspections.sort((a, b) => b.date.localeCompare(a.date) || String(a.equipmentId).localeCompare(String(b.equipmentId)));
+
+  const eqById = {};
+  equipment.forEach(e => { eqById[e.id] = e; });
+  const typeLabel = t => (EQUIPMENT_TYPES[t] || { label: t }).label;
+  const resultLabel = r => ({ pass: 'Accepted', fail: 'Rejected', na: 'N/A' }[r] || r);
+  const eqStatusLabel = s => ({ active: 'Active', out_of_service: 'Out of service', retired: 'Retired' }[s] || 'Active');
+
+  // Inventory sheet
+  const invRows = [['Equipment ID', 'Type', 'Label / Nickname', 'Manufacturer', 'Model', 'Size', 'Lanyard Type',
+    'Length', 'Class', 'Serial Number', 'Lot Number', 'Manufacture Date', 'Purchase Date', 'In Service Since',
+    'Inspection Interval (months)', 'Next Inspection Due', 'Location / Unit', 'Assigned To', 'Status', 'Comments',
+    'Last Inspected', 'Inspections Logged', 'Due Status']];
+  equipment.forEach(e => {
+    const mine = inspections.filter(i => i.equipmentId === e.id);
+    const last = mine.length ? mine[0].date : '';
+    invRows.push([e.id, typeLabel(e.type), e.label || '', e.manufacturer || '', e.model || '', e.size || '',
+      e.lanyardType || '', e.length || '', e.srlClass || '', e.serial || '', e.lotNumber || '',
+      xlDate(e.manufactureDate), xlDate(e.purchaseDate), xlDate(e.dateInService), e.intervalMonths || 12,
+      xlDate(e.nextDueDate), e.location || '', e.assignedTo || '', eqStatusLabel(e.status), e.comments || '',
+      xlDate(last), mine.length, STATUS_LABEL[computeStatus(e)]]);
+  });
+  const invWs = sheetFrom(XLSX, invRows, [14, 18, 16, 14, 11, 8, 12, 9, 8, 24, 12, 12, 12, 13, 13, 13, 14, 14, 13, 40, 13, 11, 14],
+    [12, 13, 15, 20], [11]);
+
+  // All inspections sheet
+  const insHeader = ['Equipment ID', 'Date Inspected', 'Year', 'Result', 'Inspected By', 'Checklist Results (in order)', 'Notes', 'Type', 'Serial Number'];
+  const insRow = i => {
+    const e = eqById[i.equipmentId] || {};
+    return [i.equipmentId, xlDate(i.date), Number(i.date.slice(0, 4)), resultLabel(i.result), i.inspector || '',
+      (i.items || []).map(resultLabel).join(', '), i.notes || '', e.type ? typeLabel(e.type) : '', e.serial || ''];
+  };
+  const insWs = sheetFrom(XLSX, [insHeader, ...inspections.map(insRow)], [14, 14, 8, 11, 34, 38, 30, 18, 24], [1]);
+
+  // Year summary + one tab per year
+  const years = [...new Set(inspections.map(i => i.date.slice(0, 4)))].sort().reverse();
+  const sumRows = [['Year', 'Inspections', 'Accepted', 'Rejected']];
+  years.forEach(y => {
+    const list = inspections.filter(i => i.date.startsWith(y));
+    sumRows.push([Number(y), list.length, list.filter(i => i.result === 'pass').length, list.filter(i => i.result === 'fail').length]);
+  });
+  const sumWs = XLSX.utils.aoa_to_sheet(sumRows);
+  sumWs['!cols'] = [10, 13, 11, 11].map(w => ({ wch: w }));
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, invWs, 'Inventory');
+  XLSX.utils.book_append_sheet(wb, insWs, 'Inspections');
+  XLSX.utils.book_append_sheet(wb, sumWs, 'Year Summary');
+  years.forEach(y => {
+    const rows = [['Equipment ID', 'Type', 'Serial Number', 'Date Inspected', 'Result', 'Inspected By', 'Notes']];
+    inspections.filter(i => i.date.startsWith(y)).forEach(i => {
+      const e = eqById[i.equipmentId] || {};
+      rows.push([i.equipmentId, e.type ? typeLabel(e.type) : '', e.serial || '', xlDate(i.date), resultLabel(i.result), i.inspector || '', i.notes || '']);
+    });
+    XLSX.utils.book_append_sheet(wb, sheetFrom(XLSX, rows, [14, 18, 24, 14, 11, 34, 30], [3]), `Inspections ${y}`);
+  });
+
+  XLSX.writeFile(wb, `TetherCheck_Inventory_${todayStr()}.xlsx`);
+  showToast('Excel file downloaded.');
+}
 
 async function forceUpdate() {
   showToast('Refreshing app…');
