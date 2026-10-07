@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tethercheck-v7';
+const CACHE_NAME = 'tethercheck-v8';
 const ASSETS = [
   './',
   './index.html',
