@@ -352,6 +352,10 @@ function viewDashboard() {
     <div class="section-title" style="font-size:18px;">Needs attention</div>
     ${renderAttentionList()}
     <button class="btn-secondary" data-nav="addEquipment">${icon('plus', 16)} &nbsp;Add equipment manually</button>
+    <div class="field-row" style="margin-top:10px;">
+      <button class="btn-secondary" style="margin-top:0;" data-action="backup-data">${icon('download', 16)} &nbsp;Back up data</button>
+      <button class="btn-secondary" style="margin-top:0;" data-action="import-file">${icon('upload', 16)} &nbsp;Restore backup</button>
+    </div>
   </main>`;
 }
 function renderAttentionList() {
@@ -805,6 +809,9 @@ function attachHandlers() {
   const forceUpdateBtn = document.querySelector('[data-action="force-update"]');
   if (forceUpdateBtn) forceUpdateBtn.addEventListener('click', forceUpdate);
 
+  const backupBtn = document.querySelector('[data-action="backup-data"]');
+  if (backupBtn) backupBtn.addEventListener('click', exportBackup);
+
   const exportBtn = document.querySelector('[data-action="export-xlsx"]');
   if (exportBtn) exportBtn.addEventListener('click', exportXlsx);
 
@@ -1155,8 +1162,11 @@ async function runImport(data) {
   }
   for (const ins of insList) {
     if (!ins.equipmentId || !ins.date) continue;
+    // Backups carry each inspection's insId, so restoring the same backup
+    // twice skips records that are already here instead of duplicating them.
+    if (ins.insId && await dbGet('inspections', ins.insId)) continue;
     await dbPut('inspections', {
-      insId: uid(),
+      insId: ins.insId || uid(),
       equipmentId: ins.equipmentId,
       date: ins.date,
       inspector: ins.inspector || '',
@@ -1275,6 +1285,21 @@ async function exportXlsx() {
 
   XLSX.writeFile(wb, `TetherCheck_Inventory_${todayStr()}.xlsx`);
   showToast('Excel file downloaded.');
+}
+
+// ---------- Backup (same format Import/Restore reads) ----------
+async function exportBackup() {
+  const equipment = await dbGetAll('equipment');
+  const inspections = await dbGetAll('inspections');
+  const blob = new Blob([JSON.stringify({ equipment, inspections }, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `tethercheck-backup-${todayStr()}.json`;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  showToast(`Backup saved — ${equipment.length} equipment, ${inspections.length} inspections.`);
 }
 
 async function forceUpdate() {
