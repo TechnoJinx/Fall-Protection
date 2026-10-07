@@ -467,6 +467,7 @@ async function viewDetail(id) {
           <span class="status-pill ${ins.result === 'pass' ? 'ok' : 'oos'}">${ins.result === 'pass' ? 'Accepted' : 'Rejected'}</span>
         </div>
         <div class="insp-inspector">Inspected by ${escapeHtml(ins.inspector) || '—'}</div>
+        ${ins.signature ? `<img class="sig-thumb" alt="Signature" src="${ins.signature}">` : ''}
         ${ins.notes ? `<div class="insp-notes">${escapeHtml(ins.notes)}</div>` : ''}
         <div class="badge-row">
           <button class="mini-badge" style="cursor:pointer;" data-nav="editInspection" data-id="${eq.id}" data-insid="${ins.insId}">Edit</button>
@@ -613,10 +614,73 @@ async function viewInspect(id) {
         <label>Notes (optional)</label>
         <textarea name="notes" placeholder="Anything worth flagging..."></textarea>
       </div>
+      ${signaturePadHtml('')}
       <div id="insp-result-banner"></div>
       <button type="submit" class="btn-primary">Submit inspection</button>
     </form>
   </main>`;
+}
+
+// ---------- Signature pad ----------
+// Fixed 600x180 canvas (scaled by CSS) so saved signatures stay small and
+// consistent. Ink is dark on a white background so it reads well in history
+// thumbnails and exports. Stored on the inspection as a PNG data URL.
+let sigHasInk = false;
+function signaturePadHtml(existing) {
+  return `<div class="field">
+    <label>Signature (optional)</label>
+    <div class="sig-wrap">
+      <canvas id="sig-canvas" width="600" height="180" data-existing="${existing ? escapeHtml(existing) : ''}"></canvas>
+      <div class="sig-hint" id="sig-hint">Sign here</div>
+    </div>
+    <button type="button" class="mini-badge" id="sig-clear" style="margin-top:8px;cursor:pointer;">Clear signature</button>
+  </div>`;
+}
+function getSignatureData() {
+  const canvas = document.getElementById('sig-canvas');
+  return canvas && sigHasInk ? canvas.toDataURL('image/png') : '';
+}
+function initSignaturePad() {
+  const canvas = document.getElementById('sig-canvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  const hint = document.getElementById('sig-hint');
+  const blank = () => { ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, canvas.width, canvas.height); };
+  const markInk = () => { sigHasInk = true; hint.style.display = 'none'; };
+  blank();
+  sigHasInk = false;
+  const existing = canvas.dataset.existing;
+  if (existing) {
+    const img = new Image();
+    img.onload = () => { ctx.drawImage(img, 0, 0, canvas.width, canvas.height); markInk(); };
+    img.src = existing;
+  }
+  let drawing = false, last = null;
+  const pos = (e) => {
+    const r = canvas.getBoundingClientRect();
+    return { x: (e.clientX - r.left) * canvas.width / r.width, y: (e.clientY - r.top) * canvas.height / r.height };
+  };
+  canvas.addEventListener('pointerdown', (e) => {
+    e.preventDefault();
+    canvas.setPointerCapture(e.pointerId);
+    drawing = true;
+    last = pos(e);
+    ctx.fillStyle = '#111';
+    ctx.beginPath(); ctx.arc(last.x, last.y, 1.4, 0, Math.PI * 2); ctx.fill();
+    markInk();
+  });
+  canvas.addEventListener('pointermove', (e) => {
+    if (!drawing) return;
+    e.preventDefault();
+    const p = pos(e);
+    ctx.strokeStyle = '#111'; ctx.lineWidth = 2.8; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+    ctx.beginPath(); ctx.moveTo(last.x, last.y); ctx.lineTo(p.x, p.y); ctx.stroke();
+    last = p;
+  });
+  ['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => canvas.addEventListener(ev, () => { drawing = false; }));
+  document.getElementById('sig-clear').addEventListener('click', () => {
+    blank(); sigHasInk = false; hint.style.display = '';
+  });
 }
 
 async function viewEditInspection(equipmentId, insId) {
@@ -648,6 +712,7 @@ async function viewEditInspection(equipmentId, insId) {
         <label>Notes (optional)</label>
         <textarea name="notes" placeholder="Anything worth flagging...">${escapeHtml(ins.notes || '')}</textarea>
       </div>
+      ${signaturePadHtml(ins.signature || '')}
       <div id="insp-result-banner"></div>
       <button type="submit" class="btn-primary">Save changes</button>
       <button type="button" class="btn-danger" id="delete-inspection-inline">Delete this inspection</button>
@@ -1007,6 +1072,8 @@ function attachHandlers() {
     });
   });
 
+  initSignaturePad();
+
   const inspForm = document.getElementById('insp-form');
   if (inspForm) inspForm.addEventListener('submit', async (e) => {
     e.preventDefault();
@@ -1028,6 +1095,7 @@ function attachHandlers() {
       equipmentId: eqId,
       date: fd.get('inspDate') || todayStr(),
       inspector: fd.get('inspector').trim(),
+      signature: getSignatureData(),
       notes: fd.get('notes').trim(),
       items: results,
       result: overallPass ? 'pass' : 'fail',
@@ -1061,6 +1129,7 @@ function attachHandlers() {
       equipmentId: eqId,
       date: fd.get('inspDate') || todayStr(),
       inspector: fd.get('inspector').trim(),
+      signature: getSignatureData(),
       notes: fd.get('notes').trim(),
       items: results,
       result: overallPass ? 'pass' : 'fail',
@@ -1196,6 +1265,7 @@ async function runImport(data) {
       date: ins.date,
       inspector: ins.inspector || '',
       notes: ins.notes || '',
+      signature: ins.signature || '',
       items: Array.isArray(ins.items) ? ins.items : [],
       result: ins.result === 'fail' ? 'fail' : 'pass',
     });
@@ -1277,13 +1347,13 @@ async function exportXlsx() {
     [12, 13, 15, 20], [11]);
 
   // All inspections sheet
-  const insHeader = ['Equipment ID', 'Date Inspected', 'Year', 'Result', 'Inspected By', 'Checklist Results (in order)', 'Notes', 'Type', 'Serial Number'];
+  const insHeader = ['Equipment ID', 'Date Inspected', 'Year', 'Result', 'Inspected By', 'Checklist Results (in order)', 'Notes', 'Type', 'Serial Number', 'Signed'];
   const insRow = i => {
     const e = eqById[i.equipmentId] || {};
     return [i.equipmentId, xlDate(i.date), Number(i.date.slice(0, 4)), resultLabel(i.result), i.inspector || '',
-      (i.items || []).map(resultLabel).join(', '), i.notes || '', e.type ? typeLabel(e.type) : '', e.serial || ''];
+      (i.items || []).map(resultLabel).join(', '), i.notes || '', e.type ? typeLabel(e.type) : '', e.serial || '', i.signature ? 'Yes' : ''];
   };
-  const insWs = sheetFrom(XLSX, [insHeader, ...inspections.map(insRow)], [14, 14, 8, 11, 34, 38, 30, 18, 24], [1]);
+  const insWs = sheetFrom(XLSX, [insHeader, ...inspections.map(insRow)], [14, 14, 8, 11, 34, 38, 30, 18, 24, 8], [1]);
 
   // Year summary + one tab per year
   const years = [...new Set(inspections.map(i => i.date.slice(0, 4)))].sort().reverse();
@@ -1300,12 +1370,12 @@ async function exportXlsx() {
   XLSX.utils.book_append_sheet(wb, insWs, 'Inspections');
   XLSX.utils.book_append_sheet(wb, sumWs, 'Year Summary');
   years.forEach(y => {
-    const rows = [['Equipment ID', 'Type', 'Serial Number', 'Date Inspected', 'Result', 'Inspected By', 'Notes']];
+    const rows = [['Equipment ID', 'Type', 'Serial Number', 'Date Inspected', 'Result', 'Inspected By', 'Notes', 'Signed']];
     inspections.filter(i => i.date.startsWith(y)).forEach(i => {
       const e = eqById[i.equipmentId] || {};
-      rows.push([i.equipmentId, e.type ? typeLabel(e.type) : '', e.serial || '', xlDate(i.date), resultLabel(i.result), i.inspector || '', i.notes || '']);
+      rows.push([i.equipmentId, e.type ? typeLabel(e.type) : '', e.serial || '', xlDate(i.date), resultLabel(i.result), i.inspector || '', i.notes || '', i.signature ? 'Yes' : '']);
     });
-    XLSX.utils.book_append_sheet(wb, sheetFrom(XLSX, rows, [14, 18, 24, 14, 11, 34, 30], [3]), `Inspections ${y}`);
+    XLSX.utils.book_append_sheet(wb, sheetFrom(XLSX, rows, [14, 18, 24, 14, 11, 34, 30, 8], [3]), `Inspections ${y}`);
   });
 
   XLSX.writeFile(wb, `TetherCheck_Inventory_${todayStr()}.xlsx`);
