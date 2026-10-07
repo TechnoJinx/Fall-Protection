@@ -223,10 +223,13 @@ async function nfcScan(onRead) {
   };
 }
 function nfcStop() { if (_nfcAbort) { _nfcAbort.abort(); _nfcAbort = null; } }
+// Writes just the Equipment ID as a single text record, replacing whatever
+// was on the tag. Reading it back (nfcScan) returns that same ID.
 async function nfcWrite(idValue) {
   if (!nfcSupported()) throw new Error('unsupported');
+  _nfcAbort = new AbortController();   // closing the sheet calls nfcStop() and cancels the write
   const writer = new NDEFReader();
-  await writer.write({ records: [{ recordType: 'text', data: idValue }] });
+  await writer.write({ records: [{ recordType: 'text', data: String(idValue) }] }, { signal: _nfcAbort.signal });
 }
 
 // ---------- Barcode / QR scanning (camera) ----------
@@ -486,6 +489,7 @@ async function viewDetail(id) {
       <div class="badge-row"><span class="mini-badge">${typeInfo.label}</span></div>
     </div>
     ${eq.status !== 'retired' ? `<button class="btn-primary" data-nav="inspect" data-id="${eq.id}">Run inspection</button>` : ''}
+    ${nfcSupported() ? `<button class="btn-secondary" style="margin-top:10px;margin-bottom:6px;" data-action="write-tag" data-id="${escapeHtml(eq.id)}">${icon('nfc', 16)} &nbsp;Write ID to NFC tag</button>` : ''}
     <div class="tab-row">
       <button class="tab-btn ${tab === 'info' ? 'active' : ''}" data-action="detail-tab" data-id="${eq.id}" data-tab="info">Info</button>
       <button class="tab-btn ${tab === 'history' ? 'active' : ''}" data-action="detail-tab" data-id="${eq.id}" data-tab="history">History (${inspections.length})</button>
@@ -512,7 +516,7 @@ function viewAddEquipment(params) {
           ${!editing && nfcSupported() ? `<button type="button" class="nfc-mini-btn" data-action="scan-for-id">${icon('nfc', 16)}</button>` : ''}
           ${!editing && barcodeSupported() ? `<button type="button" class="nfc-mini-btn" data-action="barcode-for-id">${icon('barcode', 16)}</button>` : ''}
         </div>
-        ${editing ? `<div class="eyebrow" style="margin-top:6px;">Changing this moves its inspection history to the new ID.</div>` : ''}
+        ${editing ? `<div class="eyebrow" style="margin-top:6px;">Changing this moves its inspection history to the new ID. Re-write its NFC tag afterward so it scans as the new ID.</div>` : ''}
       </div>
       <div class="field">
         <label>Type</label>
@@ -808,6 +812,27 @@ function attachHandlers() {
 
   const forceUpdateBtn = document.querySelector('[data-action="force-update"]');
   if (forceUpdateBtn) forceUpdateBtn.addEventListener('click', forceUpdate);
+
+  const writeTagBtn = document.querySelector('[data-action="write-tag"]');
+  if (writeTagBtn) writeTagBtn.addEventListener('click', () => {
+    const id = writeTagBtn.dataset.id;
+    const backdrop = openSheet(`
+      <div class="sheet-title">Write ID to tag</div>
+      <div class="sheet-sub">Hold your phone against the NFC tag. This replaces anything already on it with:</div>
+      <div class="detail-id" style="font-size:20px;text-align:center;color:var(--text);margin-bottom:6px;">${escapeHtml(id)}</div>
+      <div class="nfc-pulse">${icon('nfc', 34)}</div>
+      <button class="btn-secondary" id="cancel-write-tag">Cancel</button>
+    `);
+    backdrop.querySelector('#cancel-write-tag').addEventListener('click', closeSheet);
+    nfcWrite(id).then(() => {
+      closeSheet();
+      showToast(`Tag written: ${id}`);
+    }).catch((err) => {
+      if (err && err.name === 'AbortError') return;   // sheet was closed on purpose
+      closeSheet();
+      showToast('Could not write to that tag — it may be locked or read-only.');
+    });
+  });
 
   const backupBtn = document.querySelector('[data-action="backup-data"]');
   if (backupBtn) backupBtn.addEventListener('click', exportBackup);
