@@ -163,6 +163,13 @@ main{flex:1;padding:18px;}
 .badge-row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;}
 .mini-badge{font-size:11px;background:var(--surface-alt);border:1px solid var(--border);color:var(--text-dim);padding:4px 10px;border-radius:999px;}
 
+
+/* ---- Signature pad ---- */
+.sig-wrap{position:relative;border:1px solid var(--border);border-radius:10px;overflow:hidden;background:#fff;}
+.sig-wrap canvas{display:block;width:100%;aspect-ratio:600/180;touch-action:none;cursor:crosshair;}
+.sig-hint{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#9aa3af;font-size:15px;pointer-events:none;}
+.sig-thumb{display:block;height:44px;margin-top:8px;background:#fff;border-radius:6px;border:1px solid var(--border);}
+
 @media (max-width:360px){.detail-grid{grid-template-columns:1fr;}}
 </style>
 </head>
