@@ -1,4 +1,4 @@
-const CACHE_NAME = 'tethercheck-v10';
+const CACHE_NAME = 'tethercheck-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +28,9 @@ self.addEventListener('activate', (event) => {
 
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  const host = new URL(event.request.url).hostname;
+  // Only cache our own files and the two CDNs; Firebase/Google API calls go straight to the network.
+  if (host !== self.location.hostname && host !== 'www.gstatic.com' && host !== 'cdnjs.cloudflare.com') return;
   event.respondWith(
     caches.match(event.request).then((cached) => {
       if (cached) return cached;
