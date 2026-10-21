@@ -89,6 +89,7 @@ const ICONS = {
   list: '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
   clock: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/>',
   check: '<path d="M20 6L9 17l-5-5"/>',
+  cloud: '<path d="M7 18a4 4 0 01-.5-7.97A6 6 0 0118 9.5a4.25 4.25 0 011 8.5H7z"/>',
   refresh: '<path d="M21 12a9 9 0 11-3-6.7"/><path d="M21 3v6h-6"/>',
   barcode: '<path d="M3 5v14M7 5v14M11 5v14M13 5v14M17 5v14M21 5v14"/>',
   upload: '<path d="M12 16V4M7 9l5-5 5 5"/><path d="M4 16v3a2 2 0 002 2h12a2 2 0 002-2v-3"/>',
@@ -137,7 +138,7 @@ async function dbGet(store, key) {
     req.onerror = (e) => reject(e.target.error);
   });
 }
-async function dbPut(store, val) {
+async function dbPutLocal(store, val) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, 'readwrite');
@@ -146,7 +147,7 @@ async function dbPut(store, val) {
     tx.onerror = (e) => reject(e.target.error);
   });
 }
-async function dbDelete(store, key) {
+async function dbDeleteLocal(store, key) {
   const db = await openDB();
   return new Promise((resolve, reject) => {
     const tx = db.transaction(store, 'readwrite');
@@ -154,6 +155,15 @@ async function dbDelete(store, key) {
     tx.oncomplete = () => resolve();
     tx.onerror = (e) => reject(e.target.error);
   });
+}
+async function dbPut(store, val) {
+  const r = await dbPutLocal(store, val);
+  cloudPut(store, val);
+  return r;
+}
+async function dbDelete(store, key) {
+  await dbDeleteLocal(store, key);
+  cloudDelete(store, key);
 }
 async function dbInspectionsFor(equipmentId) {
   const db = await openDB();
@@ -340,7 +350,7 @@ function viewDashboard() {
     else if (s === 'oos') counts.oos++;
   });
   return `
-  ${topbar({ right: `<button class="icon-btn" data-action="force-update" title="Force refresh app">${icon('refresh', 18)}</button>` })}
+  ${topbar({ right: `<div style="display:flex;gap:8px;"><button class="icon-btn" data-action="cloud-sheet" title="Cloud sync" style="position:relative;">${icon('cloud', 18)}<span style="position:absolute;top:7px;right:7px;width:9px;height:9px;border-radius:50%;background:${cloudDotColor()};border:2px solid var(--surface-alt);"></span></button><button class="icon-btn" data-action="force-update" title="Force refresh app">${icon('refresh', 18)}</button></div>` })}
   <main>
     <button class="scan-cta" data-action="scan-sheet">
       ${icon('nfc', 26)}
@@ -874,6 +884,9 @@ function attachHandlers() {
 
   const scanBtns = document.querySelectorAll('[data-action="scan-sheet"]');
   scanBtns.forEach(el => el.addEventListener('click', openScanSheet));
+
+  const cloudBtn = document.querySelector('[data-action="cloud-sheet"]');
+  if (cloudBtn) cloudBtn.addEventListener('click', openCloudSheet);
 
   const forceUpdateBtn = document.querySelector('[data-action="force-update"]');
   if (forceUpdateBtn) forceUpdateBtn.addEventListener('click', forceUpdate);
@@ -1412,9 +1425,193 @@ async function forceUpdate() {
   location.reload();
 }
 
+// ---------- Cloud sync (Firebase Auth + Firestore) ----------
+// IndexedDB stays the app's working copy (fast, works offline). Every local write is
+// mirrored to Firestore, and Firestore changes from other devices are written back
+// into IndexedDB. Last writer wins.
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAsdOPUszAJMoe9XjGxAApRYv0hYxuuHmA",
+  authDomain: "work-related-61d23.firebaseapp.com",
+  projectId: "work-related-61d23",
+  storageBucket: "work-related-61d23.firebasestorage.app",
+  messagingSenderId: "630678886960",
+  appId: "1:630678886960:web:fd0289b69acb7599876bf5"
+};
+const FB_BASE = 'https://www.gstatic.com/firebasejs/13.1.0/';
+let fb = null;                                   // { auth, db, authM, fsM }
+const cloud = { state: 'loading', user: null, error: '' };   // loading | signedout | syncing | ready | unavailable
+let _unsubs = [];
+let _firstSnaps = 0;
+let _renderTimer = null;
+
+function cloudDotColor() {
+  return ({ ready: '#3ecf6e', syncing: '#f0b429', signedout: '#e5484d', loading: '#888', unavailable: '#888' })[cloud.state] || '#888';
+}
+function cloudKey(key) { return encodeURIComponent(String(key)).replace(/\./g, '%2E'); }
+function cloudClean(v) { return JSON.parse(JSON.stringify(v)); }
+
+function cloudPut(store, val) {
+  if (!fb || !cloud.user) return;
+  const key = store === 'equipment' ? val.id : val.insId;
+  fb.fsM.setDoc(fb.fsM.doc(fb.db, store, cloudKey(key)), cloudClean(val))
+    .catch(err => showToast('Cloud save failed: ' + (err.code || err.message)));
+}
+function cloudDelete(store, key) {
+  if (!fb || !cloud.user) return;
+  fb.fsM.deleteDoc(fb.fsM.doc(fb.db, store, cloudKey(key)))
+    .catch(err => showToast('Cloud delete failed: ' + (err.code || err.message)));
+}
+
+function scheduleSoftRender() {
+  clearTimeout(_renderTimer);
+  _renderTimer = setTimeout(() => {
+    const el = document.activeElement;
+    const typing = el && /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName);
+    const editing = ['addEquipment', 'inspect', 'editInspection'].includes(route.view);
+    if (document.querySelector('.sheet-backdrop') || typing || editing) return;
+    render();
+  }, 250);
+}
+
+function stopListeners() { _unsubs.forEach(u => { try { u(); } catch (e) {} }); _unsubs = []; }
+
+function startListeners() {
+  stopListeners();
+  cloud.state = 'syncing';
+  _firstSnaps = 0;
+  const { fsM, db } = fb;
+  for (const store of ['equipment', 'inspections']) {
+    const unsub = fsM.onSnapshot(fsM.collection(db, store), async (snap) => {
+      for (const ch of snap.docChanges()) {
+        if (ch.doc.metadata.hasPendingWrites) continue;   // our own write, already local
+        const data = ch.doc.data();
+        const key = store === 'equipment' ? data.id : data.insId;
+        if (key === undefined) continue;
+        if (ch.type === 'removed') await dbDeleteLocal(store, key);
+        else await dbPutLocal(store, data);
+      }
+      if (++_firstSnaps >= 2 && cloud.state === 'syncing') cloud.state = 'ready';
+      scheduleSoftRender();
+    }, (err) => {
+      cloud.state = 'unavailable';
+      cloud.error = err.code === 'permission-denied' ? 'Not allowed — check the Firestore rules and your sign-in.' : (err.message || 'Sync error');
+      scheduleSoftRender();
+    });
+    _unsubs.push(unsub);
+  }
+}
+
+async function initCloud() {
+  try {
+    const [appM, authM, fsM] = await Promise.all([
+      import(FB_BASE + 'firebase-app.js'),
+      import(FB_BASE + 'firebase-auth.js'),
+      import(FB_BASE + 'firebase-firestore.js'),
+    ]);
+    const app = appM.initializeApp(FIREBASE_CONFIG);
+    const auth = authM.getAuth(app);
+    let db;
+    try {
+      db = fsM.initializeFirestore(app, { localCache: fsM.persistentLocalCache({ tabManager: fsM.persistentMultipleTabManager() }) });
+    } catch (e) { db = fsM.getFirestore(app); }
+    fb = { auth, db, authM, fsM };
+    authM.onAuthStateChanged(auth, (u) => {
+      cloud.user = u;
+      if (u) startListeners(); else { stopListeners(); cloud.state = 'signedout'; }
+      scheduleSoftRender();
+    });
+  } catch (e) {
+    cloud.state = 'unavailable';
+    cloud.error = 'Could not load cloud sync (offline on first launch?). The app still works on this device.';
+  }
+}
+
+async function cloudUploadAll() {
+  const { fsM, db } = fb;
+  const equipment = await dbGetAll('equipment');
+  const inspections = await dbGetAll('inspections');
+  const jobs = [
+    ...equipment.map(v => ['equipment', cloudKey(v.id), v]),
+    ...inspections.map(v => ['inspections', cloudKey(v.insId), v]),
+  ];
+  for (let i = 0; i < jobs.length; i += 400) {
+    const batch = fsM.writeBatch(db);
+    jobs.slice(i, i + 400).forEach(([store, key, v]) => batch.set(fsM.doc(db, store, key), cloudClean(v)));
+    await batch.commit();
+  }
+  return { equipment: equipment.length, inspections: inspections.length };
+}
+
+function openCloudSheet() {
+  let html;
+  if (cloud.state === 'loading') {
+    html = `<div class="sheet-title">Cloud sync</div><div class="sheet-sub">Loading…</div><button class="btn-secondary" data-close>Close</button>`;
+  } else if (cloud.state === 'unavailable' && !cloud.user) {
+    html = `<div class="sheet-title">Cloud sync</div><div class="sheet-sub">${escapeHtml(cloud.error || 'Unavailable right now.')}</div><button class="btn-secondary" data-close>Close</button>`;
+  } else if (!cloud.user) {
+    html = `<div class="sheet-title">Sign in to sync</div>
+      <div class="sheet-sub">Use the account you were given. Your data will sync across every device you sign in on.</div>
+      <div class="field"><label>Email</label><input id="cs-email" type="email" autocomplete="username" autocapitalize="off"></div>
+      <div class="field"><label>Password</label><input id="cs-pass" type="password" autocomplete="current-password"></div>
+      <div id="cs-err" class="sheet-sub" style="color:var(--danger,#e5484d);"></div>
+      <button class="btn-primary" id="cs-signin">Sign in</button>
+      <button class="btn-secondary" data-close>Cancel</button>`;
+  } else {
+    const msg = cloud.state === 'ready' ? 'Synced. Changes on any device appear here automatically.'
+      : cloud.state === 'syncing' ? 'Syncing…'
+      : escapeHtml(cloud.error || 'Sync problem.');
+    html = `<div class="sheet-title">Cloud sync</div>
+      <div class="sheet-sub">Signed in as ${escapeHtml(cloud.user.email || '')}<br>${msg}</div>
+      <button class="btn-primary" id="cs-upload">Upload this device's data to cloud</button>
+      <div class="sheet-sub" style="margin-top:8px;">Use this once on the device that has your records. It never deletes anything.</div>
+      <button class="btn-secondary" id="cs-signout">Sign out</button>
+      <button class="btn-secondary" data-close>Close</button>`;
+  }
+  const bd = openSheet(html);
+  bd.querySelectorAll('[data-close]').forEach(b => b.addEventListener('click', closeSheet));
+  const signin = bd.querySelector('#cs-signin');
+  if (signin) {
+    const go = async () => {
+      const email = bd.querySelector('#cs-email').value.trim();
+      const pass = bd.querySelector('#cs-pass').value;
+      signin.disabled = true;
+      try {
+        await fb.authM.signInWithEmailAndPassword(fb.auth, email, pass);
+        closeSheet();
+        showToast('Signed in. Syncing…');
+      } catch (e) {
+        signin.disabled = false;
+        const bad = /invalid|wrong|user-not-found|credential/i.test(e.code || '');
+        bd.querySelector('#cs-err').textContent = bad ? 'Email or password is wrong.' : (e.code || e.message);
+      }
+    };
+    signin.addEventListener('click', go);
+    bd.querySelector('#cs-pass').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
+  }
+  const up = bd.querySelector('#cs-upload');
+  if (up) up.addEventListener('click', async () => {
+    up.disabled = true; up.textContent = 'Uploading…';
+    try {
+      const n = await cloudUploadAll();
+      closeSheet();
+      showToast(`Uploaded ${n.equipment} equipment, ${n.inspections} inspections.`);
+    } catch (e) {
+      up.disabled = false; up.textContent = "Upload this device's data to cloud";
+      showToast('Upload failed: ' + (e.code || e.message));
+    }
+  });
+  const so = bd.querySelector('#cs-signout');
+  if (so) so.addEventListener('click', async () => {
+    await fb.authM.signOut(fb.auth);
+    closeSheet();
+    showToast('Signed out. Data on this device is kept.');
+  });
+}
+
 // ---------- Boot ----------
 async function boot() {
   await openDB();
+  initCloud();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('sw.js').then(reg => {
       // Check for a newer sw.js on every launch so updates land without
